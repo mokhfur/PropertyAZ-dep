@@ -1,0 +1,157 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "User account information including roles and personal details.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "password": { "type": "string", "description": "Hashed password (handled by Auth)" },
+        "userType": { "type": "string", "enum": ["tenant", "landlord", "manager", "vendor", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "firstName": { "type": "string" },
+        "lastName": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "companyName": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "blocked": { "type": "boolean" }
+      },
+      "required": ["email", "userType", "createdAt"]
+    },
+    "properties": {
+      "title": "Property",
+      "description": "Details of a property unit for rent.",
+      "type": "object",
+      "properties": {
+        "address": { "type": "string" },
+        "propertyType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "landlordOrManager": { "type": "string", "description": "Reference to User UID" },
+        "description": { "type": "string" },
+        "numberOfBedrooms": { "type": "integer" },
+        "numberOfBathrooms": { "type": "number" },
+        "rentAmount": { "type": "number" }
+      },
+      "required": ["address", "propertyType", "createdAt", "landlordOrManager", "rentAmount"]
+    },
+    "leases": {
+      "title": "Lease",
+      "description": "Contract between landlord/manager and tenant.",
+      "type": "object",
+      "properties": {
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "rentAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "tenant": { "type": "string", "description": "Reference to User UID" },
+        "property": { "type": "string", "description": "Reference to Property ID" },
+        "landlordOrManager": { "type": "string", "description": "Reference to User UID" },
+        "depositAmount": { "type": "number" },
+        "termsAndConditions": { "type": "string" },
+        "otpSigned": { "type": "boolean" },
+        "signedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["startDate", "endDate", "rentAmount", "status", "createdAt", "tenant", "property", "landlordOrManager"]
+    },
+    "maintenance": {
+      "title": "Maintenance Request",
+      "description": "Repair and service requests.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "tenant": { "type": "string", "description": "Reference to User UID" },
+        "propertyId": { "type": "string", "description": "Reference to Property ID" },
+        "landlordOrManager": { "type": "string", "description": "Reference to User UID" },
+        "assignedToVendorId": { "type": "string", "description": "Reference to User UID" },
+        "urgency": { "type": "string" },
+        "attachedPhotos": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "description", "status", "createdAt", "tenant", "propertyId", "landlordOrManager"]
+    },
+    "messages": {
+      "title": "Message",
+      "description": "In-app communication between users.",
+      "type": "object",
+      "properties": {
+        "sender": { "type": "string", "description": "Reference to User UID" },
+        "receiver": { "type": "string", "description": "Reference to User UID" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "relatedMaintenanceRequest": { "type": "string", "description": "Reference to MaintenanceRequest ID" },
+        "relatedLease": { "type": "string", "description": "Reference to Lease ID" }
+      },
+      "required": ["sender", "receiver", "content", "createdAt"]
+    },
+    "blogPosts": {
+      "title": "Blog Post",
+      "description": "Content for the system blog.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "image": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "content", "authorId", "authorName", "createdAt"]
+    },
+    "auditLogs": {
+      "title": "Audit Log",
+      "description": "Records of administrative actions.",
+      "type": "object",
+      "properties": {
+        "adminId": { "type": "string" },
+        "adminName": { "type": "string" },
+        "action": { "type": "string" },
+        "targetId": { "type": "string" },
+        "targetType": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["adminId", "adminName", "action", "targetId", "targetType", "createdAt"]
+    },
+    "supportTickets": {
+      "title": "Support Ticket",
+      "description": "User support requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "subject": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "subject", "status", "createdAt"]
+    },
+    "broadcastMessages": {
+      "title": "Broadcast Message",
+      "description": "System-wide announcements.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "type": { "type": "string" },
+        "targetRoles": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "type", "targetRoles", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": { "schema": "users", "description": "User profile data" },
+    "/properties/{propertyId}": { "schema": "properties", "description": "Property unit data" },
+    "/leases/{leaseId}": { "schema": "leases", "description": "Lease contracts" },
+    "/maintenance/{requestId}": { "schema": "maintenance", "description": "Maintenance requests" },
+    "/messages/{messageId}": { "schema": "messages", "description": "Chat messages" },
+    "/blogPosts/{postId}": { "schema": "blogPosts", "description": "Blog content" },
+    "/auditLogs/{logId}": { "schema": "auditLogs", "description": "Admin activity logs" },
+    "/supportTickets/{ticketId}": { "schema": "supportTickets", "description": "Support tickets" },
+    "/broadcastMessages/{messageId}": { "schema": "broadcastMessages", "description": "System announcements" }
+  }
+}

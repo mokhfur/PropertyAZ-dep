@@ -1,0 +1,9 @@
+{
+  "name": "PropertyAZ",
+  "description": "A comprehensive Property Management system for the Bangladeshi market, featuring automated rent payments, maintenance tracking, electronic contract signing, and ROI analytics for landlords, tenants, and property managers.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

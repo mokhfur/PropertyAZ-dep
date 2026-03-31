@@ -1,0 +1,218 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: uid
+    // Fields:
+    //   - email: string (required)
+    //   - userType: string (required) - 'tenant', 'landlord', 'manager', 'vendor', 'admin'
+    //   - createdAt: timestamp (required)
+    //   - firstName: string
+    //   - lastName: string
+    //   - phoneNumber: string
+    //   - companyName: string
+    //   - photoUrl: string
+    //
+    // Collection: properties
+    // Document ID: auto-generated
+    // Fields:
+    //   - address: string (required)
+    //   - propertyType: string (required)
+    //   - createdAt: timestamp (required)
+    //   - landlordOrManager: string (required) - User UID
+    //   - description: string
+    //   - numberOfBedrooms: int
+    //   - numberOfBathrooms: float
+    //   - rentAmount: float (required)
+    //
+    // Collection: leases
+    // Document ID: auto-generated
+    // Fields:
+    //   - startDate: date (required)
+    //   - endDate: date (required)
+    //   - rentAmount: float (required)
+    //   - status: string (required)
+    //   - createdAt: timestamp (required)
+    //   - tenant: string (required) - User UID
+    //   - property: string (required) - Property ID
+    //   - landlordOrManager: string (required) - User UID
+    //
+    // Collection: maintenance
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required)
+    //   - description: string (required)
+    //   - status: string (required)
+    //   - createdAt: timestamp (required)
+    //   - tenant: string (required) - User UID
+    //   - propertyId: string (required) - Property ID
+    //   - landlordOrManager: string (required) - User UID
+    //   - assignedToVendorId: string - User UID
+    //   - urgency: string
+    //
+    // Collection: messages
+    // Document ID: auto-generated
+    // Fields:
+    //   - sender: string (required) - User UID
+    //   - receiver: string (required) - User UID
+    //   - content: string (required)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "mokhfur@shaficonsultancy.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'admin'));
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Domain Validators
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(['uid', 'email', 'userType', 'adminRole', 'createdAt', 'firstName', 'lastName', 'phoneNumber', 'companyName', 'photoUrl', 'blocked', 'lastLogin', 'lastIp', 'deviceInfo', 'internalNotes', 'verified']) &&
+             data.email is string && data.email.size() > 0 &&
+             data.userType in ['tenant', 'landlord', 'manager', 'vendor', 'admin'];
+    }
+
+    function isValidBlogPost(data) {
+      return hasOnlyAllowedFields(['title', 'content', 'authorId', 'authorName', 'createdAt', 'updatedAt', 'image', 'tags']) &&
+             data.title is string && data.title.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             data.authorId == request.auth.uid;
+    }
+
+    function isValidMessage(data) {
+      return hasOnlyAllowedFields(['sender', 'receiver', 'content', 'createdAt', 'relatedMaintenanceRequest', 'relatedLease']) &&
+             data.sender == request.auth.uid &&
+             data.receiver is string && data.receiver.size() > 0 &&
+             data.content is string && data.content.size() > 0 && data.content.size() < 5000;
+    }
+
+    function isValidProperty(data) {
+      return hasOnlyAllowedFields(['address', 'propertyType', 'createdAt', 'landlordOrManager', 'ownerId', 'description', 'numberOfBedrooms', 'numberOfBathrooms', 'rentAmount', 'district', 'status', 'images', 'latitude', 'longitude', 'title', 'location', 'type', 'price', 'isVerified']) &&
+             data.address is string && data.address.size() > 0 &&
+             data.propertyType is string &&
+             data.landlordOrManager is string &&
+             data.rentAmount is number && data.rentAmount > 0;
+    }
+
+    function isValidLease(data) {
+      return hasOnlyAllowedFields(['startDate', 'endDate', 'rentAmount', 'status', 'createdAt', 'tenant', 'property', 'landlordOrManager', 'depositAmount', 'termsAndConditions', 'otpSigned', 'signedAt']) &&
+             data.startDate is string && data.endDate is string &&
+             data.rentAmount is number && data.rentAmount > 0 &&
+             data.status in ['pending_tenant', 'active', 'expired', 'terminated'] &&
+             data.tenant is string && data.property is string &&
+             data.landlordOrManager is string;
+    }
+
+    function isValidMaintenance(data) {
+      return hasOnlyAllowedFields(['title', 'description', 'status', 'createdAt', 'tenant', 'propertyId', 'landlordOrManager', 'assignedToVendorId', 'urgency', 'attachedPhotos']) &&
+             data.title is string && data.title.size() > 0 &&
+             data.description is string && data.description.size() > 0 &&
+             data.status is string &&
+             data.tenant is string && data.propertyId is string &&
+             data.landlordOrManager is string;
+    }
+
+    // Connection Test Rule
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // User Rules
+    match /users/{uid} {
+      allow read: if isAuthenticated();
+      allow create: if (isOwner(uid) && isValidUser(request.resource.data)) || isAdmin();
+      allow update: if (isOwner(uid) && isValidUser(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Property Rules
+    match /properties/{propertyId} {
+      allow read: if true; 
+      allow create: if isAuthenticated() && (request.resource.data.landlordOrManager == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.landlordOrManager == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.landlordOrManager == request.auth.uid || isAdmin());
+    }
+
+    // Lease Rules
+    match /leases/{leaseId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.tenant || request.auth.uid == resource.data.landlordOrManager);
+      allow create: if isAuthenticated() && (isAdmin() || request.auth.uid == request.resource.data.landlordOrManager) && isValidLease(request.resource.data);
+      allow update: if isAuthenticated() && (
+        ((isAdmin() || request.auth.uid == resource.data.landlordOrManager) && isValidLease(request.resource.data)) ||
+        (
+          request.auth.uid == resource.data.tenant && 
+          isValidLease(request.resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'otpSigned', 'signedAt']) &&
+          resource.data.status == 'pending_tenant' &&
+          request.resource.data.status == 'active' &&
+          request.resource.data.otpSigned == true
+        )
+      );
+    }
+
+    // Maintenance Rules
+    match /maintenance/{requestId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.tenant || request.auth.uid == resource.data.landlordOrManager || request.auth.uid == resource.data.assignedToVendorId);
+      allow create: if isAuthenticated() && request.resource.data.tenant == request.auth.uid && isValidMaintenance(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.tenant || request.auth.uid == resource.data.landlordOrManager || request.auth.uid == resource.data.assignedToVendorId) && isValidMaintenance(request.resource.data);
+    }
+
+    // Message Rules
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.sender || request.auth.uid == resource.data.receiver);
+      allow create: if isAuthenticated() && isValidMessage(request.resource.data);
+    }
+
+    // Payment Rules
+    match /payments/{paymentId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.tenant || request.auth.uid == resource.data.landlordOrManager);
+      allow create: if isAuthenticated() && request.resource.data.tenant == request.auth.uid;
+      allow update: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.landlordOrManager);
+    }
+
+    // Blog Rules
+    match /blogPosts/{postId} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Audit Log Rules
+    match /auditLogs/{logId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false; // Audit logs should be immutable
+    }
+
+    // Support Ticket Rules
+    match /supportTickets/{ticketId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.userId || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAdmin() || (isAuthenticated() && request.auth.uid == resource.data.userId && request.resource.data.status == resource.data.status);
+      allow delete: if isAdmin();
+    }
+
+    // Broadcast Message Rules
+    match /broadcastMessages/{messageId} {
+      allow read: if true; // Everyone can read announcements, filtering happens in UI
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
