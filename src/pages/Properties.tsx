@@ -17,7 +17,9 @@ import {
   Building2,
   User as UserIcon,
   LayoutGrid,
-  Map as MapIcon
+  Map as MapIcon,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -81,6 +83,45 @@ const Properties: React.FC = () => {
   });
 
   const [allLandlords, setAllLandlords] = useState<User[]>([]);
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const handleFileChange = (files: FileList | null) => {
+    if (!files) return;
+
+    const fileArray = Array.from(files);
+    fileArray.forEach(file => {
+      if (!file.type.startsWith('image/')) return;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setIsDragging(true);
+    } else if (e.type === 'dragleave') {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFileChange(e.dataTransfer.files);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -142,6 +183,7 @@ const Properties: React.FC = () => {
     try {
       const propertyData: Omit<Property, 'id'> = {
         ...newProperty,
+        images: selectedImages,
         createdAt: new Date().toISOString(),
         landlordOrManager: profile.uid,
         ownerId: profile.userType === 'landlord' ? profile.uid : newProperty.ownerId
@@ -152,7 +194,7 @@ const Properties: React.FC = () => {
       if (docRef) {
         const createdProperty = { id: docRef.id, ...propertyData } as Property;
         setProperties([createdProperty, ...properties]);
-        setShowAddModal(false);
+        closeAddModal();
         setNewProperty({
           address: '',
           propertyType: 'Apartment',
@@ -194,6 +236,11 @@ const Properties: React.FC = () => {
     }
     return [23.8103, 90.4125]; // Default Dhaka
   }, [hoveredPropertyId, properties, filteredProperties]);
+
+  const closeAddModal = () => {
+    setShowAddModal(false);
+    setSelectedImages([]);
+  };
 
   if (loading) {
     return (
@@ -438,7 +485,7 @@ const Properties: React.FC = () => {
             >
               <div className="p-6 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
                 <h3 className="text-xl font-bold text-slate-900">Add New Property</h3>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+                <button onClick={closeAddModal} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                   <X className="w-5 h-5 text-slate-400" />
                 </button>
               </div>
@@ -566,6 +613,58 @@ const Properties: React.FC = () => {
                           <option key={l.uid} value={l.uid}>{l.firstName} {l.lastName} ({l.email})</option>
                         ))}
                       </select>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Property Images</label>
+                  
+                  <div 
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "relative border-2 border-dashed rounded-3xl p-8 transition-all flex flex-col items-center justify-center gap-3",
+                      isDragging ? "border-blue-900 bg-blue-50/50" : "border-slate-200 hover:border-slate-300 bg-slate-50"
+                    )}
+                  >
+                    <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-slate-900">Drag & drop images here</p>
+                      <p className="text-xs text-slate-500 mt-1">or click to browse from your computer</p>
+                    </div>
+                    <input 
+                      type="file" 
+                      multiple 
+                      accept="image/*"
+                      className="absolute inset-0 opacity-0 cursor-pointer"
+                      onChange={(e) => handleFileChange(e.target.files)}
+                    />
+                  </div>
+
+                  {selectedImages.length > 0 && (
+                    <div className="grid grid-cols-4 gap-4 mt-4">
+                      {selectedImages.map((src, idx) => (
+                        <div key={idx} className="group relative aspect-square rounded-2xl overflow-hidden border border-slate-200 shadow-sm bg-white">
+                          <img src={src} alt={`Preview ${idx}`} className="w-full h-full object-cover" />
+                          <button 
+                            type="button"
+                            onClick={() => removeImage(idx)}
+                            className="absolute top-1 right-1 p-1 bg-black/60 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          {idx === 0 && (
+                            <div className="absolute bottom-0 inset-x-0 bg-blue-900/80 text-white text-[8px] font-bold uppercase py-1 text-center">
+                              Primary
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

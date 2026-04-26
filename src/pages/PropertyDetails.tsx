@@ -28,6 +28,7 @@ const PropertyDetails: React.FC = () => {
   const [maintenance, setMaintenance] = useState<MaintenanceRequest[]>([]);
   const [owner, setOwner] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -118,8 +119,13 @@ const PropertyDetails: React.FC = () => {
         {/* Main Info */}
         <div className="lg:col-span-2 space-y-8">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="aspect-video bg-slate-100 relative">
-              <img src={property.images?.[0] || 'https://picsum.photos/seed/prop/1200/600'} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+            <div className="aspect-video bg-slate-100 relative group">
+              <img 
+                src={property.images?.[activeImageIndex] || 'https://picsum.photos/seed/prop/1200/600'} 
+                className="w-full h-full object-cover transition-all duration-500" 
+                referrerPolicy="no-referrer" 
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <div className="absolute bottom-6 left-6 text-white">
                 <h2 className="text-3xl font-bold drop-shadow-lg">{property.address}</h2>
                 <p className="flex items-center gap-1 text-sm opacity-90 drop-shadow-md mt-1">
@@ -127,6 +133,24 @@ const PropertyDetails: React.FC = () => {
                 </p>
               </div>
             </div>
+            
+            {property.images && property.images.length > 1 && (
+              <div className="p-4 border-b border-slate-100 flex gap-3 overflow-x-auto bg-slate-50">
+                {property.images.map((src, idx) => (
+                  <button 
+                    key={idx}
+                    onClick={() => setActiveImageIndex(idx)}
+                    className={cn(
+                      "w-20 aspect-square rounded-xl overflow-hidden border-2 transition-all flex-shrink-0",
+                      activeImageIndex === idx ? "border-blue-900 shadow-md" : "border-transparent opacity-60 hover:opacity-100"
+                    )}
+                  >
+                    <img src={src} className="w-full h-full object-cover" />
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="p-8 grid grid-cols-3 gap-8">
               <div>
                 <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Monthly Rent</p>
