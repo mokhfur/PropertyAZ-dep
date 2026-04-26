@@ -160,11 +160,10 @@ service cloud.firestore {
         ((isAdmin() || request.auth.uid == resource.data.landlordOrManager) && isValidLease(request.resource.data)) ||
         (
           request.auth.uid == resource.data.tenant && 
-          isValidLease(request.resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'otpSigned', 'signedAt']) &&
           resource.data.status == 'pending_tenant' &&
           request.resource.data.status == 'active' &&
-          request.resource.data.otpSigned == true
+          request.resource.data.otpSigned == true &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'otpSigned', 'signedAt'])
         )
       );
     }
@@ -213,6 +212,20 @@ service cloud.firestore {
     match /broadcastMessages/{messageId} {
       allow read: if true; // Everyone can read announcements, filtering happens in UI
       allow create, update, delete: if isAdmin();
+    }
+
+    function isValidTemplate(data) {
+      return hasOnlyAllowedFields(['name', 'content', 'category', 'createdBy', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             data.createdBy == request.auth.uid;
+    }
+
+    // Contract Template Rules
+    match /contractTemplates/{templateId} {
+      allow read: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin() || resource.data.category == 'public');
+      allow create: if isAuthenticated() && isValidTemplate(request.resource.data);
+      allow update, delete: if isAuthenticated() && (resource.data.createdBy == request.auth.uid || isAdmin()) && isValidTemplate(request.resource.data);
     }
   }
 }

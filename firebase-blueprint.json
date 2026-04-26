@@ -141,6 +141,19 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "content", "type", "targetRoles", "createdAt"]
+    },
+    "contractTemplates": {
+      "title": "Contract Template",
+      "description": "Reusable lease agreement templates.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "content", "createdBy", "createdAt"]
     }
   },
   "firestore": {
@@ -152,6 +165,7 @@
     "/blogPosts/{postId}": { "schema": "blogPosts", "description": "Blog content" },
     "/auditLogs/{logId}": { "schema": "auditLogs", "description": "Admin activity logs" },
     "/supportTickets/{ticketId}": { "schema": "supportTickets", "description": "Support tickets" },
-    "/broadcastMessages/{messageId}": { "schema": "broadcastMessages", "description": "System announcements" }
+    "/broadcastMessages/{messageId}": { "schema": "broadcastMessages", "description": "System announcements" },
+    "/contractTemplates/{templateId}": { "schema": "contractTemplates", "description": "Reusable contract templates" }
   }
 }

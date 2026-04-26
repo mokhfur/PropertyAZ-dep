@@ -33,9 +33,12 @@ import { cn } from '../../lib/utils';
 
 const AdminProperties: React.FC = () => {
   const [properties, setProperties] = useState<Property[]>([]);
+  const [owners, setOwners] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [sortBy, setBy] = useState('newest');
 
   useEffect(() => {
     const fetchProperties = async () => {
@@ -44,7 +47,22 @@ const AdminProperties: React.FC = () => {
         const q = query(collection(db, 'properties'), orderBy('createdAt', 'desc'));
         const snap = await getDocs(q).catch(err => handleFirestoreError(err, OperationType.GET, 'properties'));
         if (snap) {
-          setProperties(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property)));
+          const props = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Property));
+          setProperties(props);
+
+          // Fetch owner details
+          const ownerIds = [...new Set(props.map(p => p.ownerId).filter(Boolean))];
+          if (ownerIds.length > 0) {
+            const ownerQ = query(collection(db, 'users'), where('uid', 'in', ownerIds.slice(0, 10)));
+            const ownerSnap = await getDocs(ownerQ).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
+            if (ownerSnap) {
+              const ownerMap: Record<string, any> = {};
+              ownerSnap.docs.forEach(doc => {
+                ownerMap[doc.id] = { uid: doc.id, ...doc.data() };
+              });
+              setOwners(ownerMap);
+            }
+          }
         }
       } catch (err) {
         console.error(err);
@@ -64,10 +82,20 @@ const AdminProperties: React.FC = () => {
     }
   };
 
-  const filteredProperties = properties.filter(p => 
-    (p.address + ' ' + (p.district || '')).toLowerCase().includes(searchTerm.toLowerCase()) &&
-    (filterType === 'all' || p.propertyType === filterType)
-  );
+  const filteredProperties = properties
+    .filter(p => 
+      (p.address + ' ' + (p.district || '')).toLowerCase().includes(searchTerm.toLowerCase()) &&
+      (filterType === 'all' || p.propertyType === filterType) &&
+      (filterStatus === 'all' || p.status === filterStatus)
+    )
+    .sort((a, b) => {
+      if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sortBy === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      if (sortBy === 'price-high') return b.rentAmount - a.rentAmount;
+      if (sortBy === 'price-low') return a.rentAmount - b.rentAmount;
+      if (sortBy === 'status') return (a.status || '').localeCompare(b.status || '');
+      return 0;
+    });
 
   return (
     <div className="space-y-8">
@@ -110,18 +138,51 @@ const AdminProperties: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col md:row items-center gap-4">
-        <div className="flex-1 relative w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input 
-            type="text" 
-            placeholder="Search properties by title or location..."
-            className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl text-sm shadow-sm outline-none focus:ring-2 focus:ring-blue-600/10"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
+      <div className="space-y-4">
+        <div className="flex flex-col md:flex-row items-center gap-4">
+          <div className="flex-1 relative w-full">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input 
+              type="text" 
+              placeholder="Search properties by title or location..."
+              className="w-full pl-11 pr-4 py-3 bg-white border border-slate-100 rounded-2xl text-sm shadow-sm outline-none focus:ring-2 focus:ring-blue-600/10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-2xl px-3 py-1.5 shadow-sm">
+              <Filter className="w-4 h-4 text-slate-400" />
+              <select 
+                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+                value={sortBy}
+                onChange={(e) => setBy(e.target.value)}
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+                <option value="price-high">Highest Price</option>
+                <option value="price-low">Lowest Price</option>
+                <option value="status">By Status</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-2xl px-3 py-1.5 shadow-sm">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status:</span>
+              <select 
+                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="vacant">Vacant</option>
+                <option value="occupied">Occupied</option>
+                <option value="under repair">Under Repair</option>
+              </select>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
+        
+        <div className="flex items-center gap-2 w-full overflow-x-auto pb-2">
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-2">Type:</span>
           {['all', 'apartment', 'house', 'commercial', 'land'].map((type) => (
             <button
               key={type}
@@ -200,27 +261,50 @@ const AdminProperties: React.FC = () => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                    <Building2 className="w-4 h-4" />
+              <div className="flex flex-col gap-2 pt-4 border-t border-slate-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                      <Building2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">Landlord/Manager</p>
+                      <p className="text-xs font-bold text-slate-700">ID: {property.landlordOrManager.slice(0, 8)}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">Landlord</p>
-                    <p className="text-xs font-bold text-slate-700">ID: {property.landlordOrManager.slice(0, 8)}</p>
-                  </div>
+                  <button 
+                    onClick={() => handleVerify(property.id, property.isVerified)}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all",
+                      property.isVerified 
+                        ? "bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600" 
+                        : "bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+                    )}
+                  >
+                    {property.isVerified ? 'Unverify' : 'Verify Now'}
+                  </button>
                 </div>
-                <button 
-                  onClick={() => handleVerify(property.id, property.isVerified)}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all",
-                    property.isVerified 
-                      ? "bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-600" 
-                      : "bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+
+                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Property Owner</p>
+                  {property.ownerId ? (
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">
+                        {owners[property.ownerId]?.firstName} {owners[property.ownerId]?.lastName || 'Loading...'}
+                      </p>
+                      {owners[property.ownerId] && (
+                        <div className="flex flex-col mt-0.5">
+                          <p className="text-[10px] text-slate-500">{owners[property.ownerId].email}</p>
+                          {owners[property.ownerId].phoneNumber && (
+                            <p className="text-[10px] text-slate-500">{owners[property.ownerId].phoneNumber}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs font-bold text-slate-400">N/A</p>
                   )}
-                >
-                  {property.isVerified ? 'Unverify' : 'Verify Now'}
-                </button>
+                </div>
               </div>
             </div>
           </motion.div>

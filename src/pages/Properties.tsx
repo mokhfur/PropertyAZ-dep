@@ -103,22 +103,22 @@ const Properties: React.FC = () => {
           });
           setProperties(props);
 
-          // If manager, fetch owner details
-          if (profile.userType === 'manager') {
-            const ownerIds = [...new Set(props.map(p => p.ownerId).filter(Boolean))];
-            if (ownerIds.length > 0) {
-              const ownerQ = query(collection(db, 'users'), where('uid', 'in', ownerIds.slice(0, 10)));
-              const ownerSnap = await getDocs(ownerQ).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
-              if (ownerSnap) {
-                const ownerMap: Record<string, User> = {};
-                ownerSnap.docs.forEach(doc => {
-                  ownerMap[doc.id] = { uid: doc.id, ...doc.data() } as User;
-                });
-                setOwners(ownerMap);
-              }
+          // Fetch owner details for all properties with ownerId
+          const ownerIds = [...new Set(props.map(p => p.ownerId).filter(Boolean))];
+          if (ownerIds.length > 0) {
+            const ownerQ = query(collection(db, 'users'), where('uid', 'in', ownerIds.slice(0, 10)));
+            const ownerSnap = await getDocs(ownerQ).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
+            if (ownerSnap) {
+              const ownerMap: Record<string, User> = {};
+              ownerSnap.docs.forEach(doc => {
+                ownerMap[doc.id] = { uid: doc.id, ...doc.data() } as User;
+              });
+              setOwners(ownerMap);
             }
+          }
 
-            // Also fetch all landlords for the "Add Property" dropdown
+          // If manager, fetch all landlords for the "Add Property" dropdown
+          if (profile.userType === 'manager') {
             const landlordQ = query(collection(db, 'users'), where('userType', '==', 'landlord'));
             const landlordSnap = await getDocs(landlordQ).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
             if (landlordSnap) {
@@ -318,14 +318,25 @@ const Properties: React.FC = () => {
                   {prop.district || 'Dhaka'}
                 </div>
 
-                {profile?.userType === 'manager' && prop.ownerId && (
-                  <div className="flex items-center gap-2 mb-4 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex flex-col gap-2 mb-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="flex items-center gap-2">
                     <UserIcon className="w-3 h-3 text-slate-400" />
-                    <p className="text-[10px] text-slate-500">
-                      Owner: <span className="font-bold text-slate-700">{owners[prop.ownerId]?.firstName} {owners[prop.ownerId]?.lastName || 'Loading...'}</span>
-                    </p>
+                    <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-none">Property Owner</p>
                   </div>
-                )}
+                  {prop.ownerId ? (
+                    <div>
+                      <p className="text-xs font-bold text-slate-900">{owners[prop.ownerId]?.firstName} {owners[prop.ownerId]?.lastName || 'Loading...'}</p>
+                      {owners[prop.ownerId] && (
+                        <div className="flex flex-col mt-1 space-y-0.5">
+                          <p className="text-[10px] text-slate-500">{owners[prop.ownerId].email}</p>
+                          {owners[prop.ownerId].phoneNumber && <p className="text-[10px] text-slate-500">{owners[prop.ownerId].phoneNumber}</p>}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs font-bold text-slate-400">N/A</p>
+                  )}
+                </div>
                 
                 <div className="grid grid-cols-3 gap-2 py-4 border-t border-slate-100">
                   <div className="text-center">

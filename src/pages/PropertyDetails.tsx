@@ -38,11 +38,11 @@ const PropertyDetails: React.FC = () => {
           const propData = { id: propSnap.id, ...propSnap.data() } as Property;
           setProperty(propData);
           
-          // Fetch Owner if manager
-          if (profile?.userType === 'manager' && propData.ownerId) {
+          // Fetch Owner details
+          if (propData.ownerId) {
             const ownerSnap = await getDoc(doc(db, 'users', propData.ownerId));
             if (ownerSnap.exists()) {
-              setOwner(ownerSnap.data() as UserProfile);
+              setOwner({ uid: ownerSnap.id, ...ownerSnap.data() } as UserProfile);
             }
           }
 
@@ -155,20 +155,27 @@ const PropertyDetails: React.FC = () => {
             </div>
           </div>
 
-          {profile?.userType === 'manager' && owner && (
-            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
-                  <UserIcon className="w-6 h-6 text-slate-400" />
-                </div>
-                <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Property Owner</p>
-                  <h3 className="text-lg font-bold text-slate-900">{owner.firstName} {owner.lastName}</h3>
-                  <p className="text-xs text-slate-500">{owner.email}</p>
-                </div>
+          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
+                <UserIcon className="w-6 h-6 text-slate-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest leading-none mb-2">Property Owner</p>
+                {owner ? (
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">{owner.firstName} {owner.lastName}</h3>
+                    <div className="flex flex-col mt-1 gap-1">
+                      <p className="text-sm text-slate-500">{owner.email}</p>
+                      {owner.phoneNumber && <p className="text-sm text-slate-500">{owner.phoneNumber}</p>}
+                    </div>
+                  </div>
+                ) : (
+                  <h3 className="text-lg font-bold text-slate-400">N/A</h3>
+                )}
               </div>
             </div>
-          )}
+          </div>
 
           {isAuthorized && tenants.length > 0 && (
             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm">
