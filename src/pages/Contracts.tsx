@@ -309,7 +309,8 @@ const Contracts: React.FC = () => {
         ...newLease,
         status: 'pending_tenant',
         createdAt: new Date().toISOString(),
-        landlordOrManager: profile.uid
+        landlordOrManager: profile.uid,
+        reminderSent: false
       };
       const docRef = await addDoc(collection(db, 'leases'), leaseData).catch(err => handleFirestoreError(err, OperationType.WRITE, 'leases'));
       if (docRef) {

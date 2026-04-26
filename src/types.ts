@@ -58,6 +58,7 @@ export interface Lease {
   termsAndConditions?: string;
   otpSigned?: boolean;
   signedAt?: string;
+  reminderSent?: boolean;
 }
 
 export interface MaintenanceRequest {
