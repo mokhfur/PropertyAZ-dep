@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
-import { Property, UserProfile, Lease, MaintenanceRequest } from '../types';
+import { doc, getDoc, collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from '../firebase';
+import { Property, UserProfile, Lease, MaintenanceRequest, ManagementAgreement } from '../types';
 import { useAuth } from '../AuthContext';
 import { 
   MapPin, 
@@ -15,9 +15,13 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
-  User as UserIcon
+  User as UserIcon,
+  ShieldCheck,
+  Plus,
+  X
 } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { motion, AnimatePresence } from 'motion/react';
 
 const PropertyDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +33,14 @@ const PropertyDetails: React.FC = () => {
   const [owner, setOwner] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  
+  // Assign Manager states
+  const [showAssignManagerModal, setShowAssignManagerModal] = useState(false);
+  const [availableManagers, setAvailableManagers] = useState<UserProfile[]>([]);
+  const [selectedManagerId, setSelectedManagerId] = useState('');
+  const [mgmtTerms, setMgmtTerms] = useState('');
+  const [mgmtCommission, setMgmtCommission] = useState(10);
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -86,7 +98,47 @@ const PropertyDetails: React.FC = () => {
     fetchData();
   }, [id, profile]);
 
+  const fetchManagers = async () => {
+    try {
+      const q = query(collection(db, 'users'), where('userType', '==', 'manager'));
+      const snap = await getDocs(q).catch(err => handleFirestoreError(err, OperationType.GET, 'users'));
+      if (snap) {
+        setAvailableManagers(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAssignManager = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile || !property || !selectedManagerId) return;
+
+    setAssigning(true);
+    try {
+      const agreement: Omit<ManagementAgreement, 'id'> = {
+        propertyId: property.id,
+        landlordId: profile.uid,
+        managerId: selectedManagerId,
+        status: 'pending',
+        terms: mgmtTerms || 'Standard property management agreement.',
+        commissionRate: mgmtCommission,
+        createdAt: new Date().toISOString()
+      };
+
+      await addDoc(collection(db, 'managementAgreements'), agreement).catch(err => handleFirestoreError(err, OperationType.WRITE, 'managementAgreements'));
+      
+      alert('Management request sent successfully!');
+      setShowAssignManagerModal(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const isAuthorized = profile && ['landlord', 'manager', 'admin'].includes(profile.userType);
+  const isOwner = profile && property && property.ownerId === profile.uid;
 
   const handleContactManager = () => {
     if (!user) {
@@ -107,12 +159,23 @@ const PropertyDetails: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           Back
         </button>
-        {isAuthorized && (
-          <div className="flex gap-3">
-            <button className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">Edit Property</button>
-            <button className="px-4 py-2 bg-[#0f2a4a] text-white rounded-xl text-sm font-bold hover:bg-[#0a1e36]">Add Unit</button>
-          </div>
-        )}
+        <div className="flex gap-3">
+          {isOwner && (
+            <button 
+              onClick={() => { fetchManagers(); setShowAssignManagerModal(true); }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 flex items-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              Assign Manager
+            </button>
+          )}
+          {isAuthorized && (
+            <>
+              <button className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-50">Edit Property</button>
+              <button className="px-4 py-2 bg-[#0f2a4a] text-white rounded-xl text-sm font-bold hover:bg-[#0a1e36]">Add Unit</button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -267,6 +330,76 @@ const PropertyDetails: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showAssignManagerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl"
+            >
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">Assign Property Manager</h3>
+                <button onClick={() => setShowAssignManagerModal(false)} className="p-2 hover:bg-slate-100 rounded-full transition-colors font-bold text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleAssignManager} className="p-8 space-y-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Select Manager</label>
+                  <select 
+                    required
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-900/10 outline-none"
+                    value={selectedManagerId}
+                    onChange={e => setSelectedManagerId(e.target.value)}
+                  >
+                    <option value="">Choose a manager</option>
+                    {availableManagers.map(m => (
+                      <option key={m.uid} value={m.uid}>{m.firstName} {m.lastName} ({m.companyName || 'Freelance'})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Commission (%)</label>
+                    <input 
+                      type="number" 
+                      min="0"
+                      max="100"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                      value={mgmtCommission}
+                      onChange={e => setMgmtCommission(Number(e.target.value))}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Management Terms</label>
+                  <textarea 
+                    rows={4}
+                    placeholder="Enter management terms, responsibilities, etc."
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none"
+                    value={mgmtTerms}
+                    onChange={e => setMgmtTerms(e.target.value)}
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={assigning}
+                  className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {assigning ? 'Sending Request...' : 'Send Management Request'}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

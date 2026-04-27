@@ -113,6 +113,12 @@ service cloud.firestore {
              data.rentAmount is number && data.rentAmount > 0;
     }
 
+    function isValidManagementAgreement(data) {
+      return hasOnlyAllowedFields(['propertyId', 'landlordId', 'managerId', 'status', 'terms', 'commissionRate', 'startDate', 'endDate', 'signedAt', 'createdAt']) &&
+             data.propertyId is string && data.landlordId is string &&
+             data.managerId is string && data.status in ['pending', 'active', 'declined', 'terminated'];
+    }
+
     function isValidLease(data) {
       return hasOnlyAllowedFields(['startDate', 'endDate', 'rentAmount', 'status', 'createdAt', 'tenant', 'property', 'landlordOrManager', 'depositAmount', 'termsAndConditions', 'otpSigned', 'signedAt']) &&
              data.startDate is string && data.endDate is string &&
@@ -147,9 +153,19 @@ service cloud.firestore {
     // Property Rules
     match /properties/{propertyId} {
       allow read: if true; 
-      allow create: if isAuthenticated() && (request.resource.data.landlordOrManager == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
-      allow update: if isAuthenticated() && (resource.data.landlordOrManager == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
-      allow delete: if isAuthenticated() && (resource.data.landlordOrManager == request.auth.uid || isAdmin());
+      allow create: if isAuthenticated() && (request.resource.data.landlordOrManager == request.auth.uid || request.resource.data.ownerId == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
+      allow update: if isAuthenticated() && (resource.data.landlordOrManager == request.auth.uid || resource.data.ownerId == request.auth.uid || isAdmin()) && isValidProperty(request.resource.data);
+      allow delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isAdmin());
+    }
+
+    // Management Agreement Rules
+    match /managementAgreements/{agreementId} {
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.landlordId || request.auth.uid == resource.data.managerId);
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.landlordId && isValidManagementAgreement(request.resource.data);
+      allow update: if isAuthenticated() && (
+        (isAdmin() || request.auth.uid == resource.data.landlordId) ||
+        (request.auth.uid == resource.data.managerId && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'signedAt']))
+      ) && isValidManagementAgreement(request.resource.data);
     }
 
     // Lease Rules

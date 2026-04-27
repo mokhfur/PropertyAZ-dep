@@ -44,6 +44,20 @@ export interface Property {
   longitude?: number;
 }
 
+export interface ManagementAgreement {
+  id: string;
+  propertyId: string;
+  landlordId: string;
+  managerId: string;
+  status: 'pending' | 'active' | 'declined' | 'terminated';
+  terms?: string;
+  commissionRate?: number;
+  startDate?: string;
+  endDate?: string;
+  signedAt?: string;
+  createdAt: string;
+}
+
 export interface Lease {
   id: string;
   startDate: string;

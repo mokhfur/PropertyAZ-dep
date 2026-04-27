@@ -154,6 +154,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["name", "content", "createdBy", "createdAt"]
+    },
+    "managementAgreements": {
+      "title": "Management Agreement",
+      "description": "Contract between landlord and property manager.",
+      "type": "object",
+      "properties": {
+        "propertyId": { "type": "string", "description": "Reference to Property ID" },
+        "landlordId": { "type": "string", "description": "Reference to Landlord User UID" },
+        "managerId": { "type": "string", "description": "Reference to Manager User UID" },
+        "status": { "type": "string", "enum": ["pending", "active", "declined", "terminated"] },
+        "terms": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "signedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["propertyId", "landlordId", "managerId", "status", "createdAt"]
     }
   },
   "firestore": {
@@ -166,6 +184,7 @@
     "/auditLogs/{logId}": { "schema": "auditLogs", "description": "Admin activity logs" },
     "/supportTickets/{ticketId}": { "schema": "supportTickets", "description": "Support tickets" },
     "/broadcastMessages/{messageId}": { "schema": "broadcastMessages", "description": "System announcements" },
-    "/contractTemplates/{templateId}": { "schema": "contractTemplates", "description": "Reusable contract templates" }
+    "/contractTemplates/{templateId}": { "schema": "contractTemplates", "description": "Reusable contract templates" },
+    "/managementAgreements/{agreementId}": { "schema": "managementAgreements", "description": "Management contracts" }
   }
 }

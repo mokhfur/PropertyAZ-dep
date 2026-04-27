@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, orderBy } from 'firebase/firestore';
+import { useNavigate } from 'react-router-dom';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
-import { Lease, Property, User } from '../types';
+import { Lease, Property, User, ManagementAgreement } from '../types';
 import { 
   FileText, 
   Clock, 
@@ -24,18 +25,23 @@ import {
   FileStack,
   Search,
   FileUp,
-  Edit3
+  Edit3,
+  Signature
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 const Contracts: React.FC = () => {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const [leases, setLeases] = useState<Lease[]>([]);
   const [selectedLease, setSelectedLease] = useState<Lease | null>(null);
+  const [mgmtAgreements, setMgmtAgreements] = useState<ManagementAgreement[]>([]);
+  const [selectedMgmt, setSelectedMgmt] = useState<ManagementAgreement | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'contracts' | 'templates'>('contracts');
+  const [activeTab, setActiveTab] = useState<'contracts' | 'templates' | 'management'>('contracts');
   const [signingStep, setSigningStep] = useState(0); // 0: Review, 1: OTP, 2: Success
+  const [mgmtSigningStep, setMgmtSigningStep] = useState(0);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [resendStatus, setResendStatus] = useState<string | null>(null);
   
@@ -125,6 +131,14 @@ const Contracts: React.FC = () => {
         if (snap) {
           fetchedLeases = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lease));
           setLeases(fetchedLeases);
+        }
+
+        // Fetch Management Agreements
+        const mgmtField = profile.userType === 'landlord' ? 'landlordId' : 'managerId';
+        const mgmtQ = query(collection(db, 'managementAgreements'), where(mgmtField, '==', profile.uid), orderBy('createdAt', 'desc'));
+        const mgmtSnap = await getDocs(mgmtQ).catch(err => handleFirestoreError(err, OperationType.GET, 'managementAgreements'));
+        if (mgmtSnap) {
+          setMgmtAgreements(mgmtSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ManagementAgreement)));
         }
 
         // Fetch properties
@@ -480,6 +494,43 @@ const Contracts: React.FC = () => {
     }
   };
 
+  const handleAcceptMgmt = async () => {
+    if (!selectedMgmt || !profile) return;
+    try {
+      const agreementRef = doc(db, 'managementAgreements', selectedMgmt.id);
+      await updateDoc(agreementRef, {
+        status: 'active',
+        signedAt: new Date().toISOString()
+      }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `managementAgreements/${selectedMgmt.id}`));
+      
+      // Also update the property's landlordOrManager to the manager
+      const propertyRef = doc(db, 'properties', selectedMgmt.propertyId);
+      await updateDoc(propertyRef, {
+        landlordOrManager: profile.uid
+      }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `properties/${selectedMgmt.propertyId}`));
+
+      setMgmtAgreements(mgmtAgreements.map(a => a.id === selectedMgmt.id ? { ...a, status: 'active', signedAt: new Date().toISOString() } as ManagementAgreement : a));
+      setMgmtSigningStep(2);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeclineMgmt = async () => {
+    if (!selectedMgmt) return;
+    try {
+      const agreementRef = doc(db, 'managementAgreements', selectedMgmt.id);
+      await updateDoc(agreementRef, {
+        status: 'declined'
+      }).catch(err => handleFirestoreError(err, OperationType.UPDATE, `managementAgreements/${selectedMgmt.id}`));
+      
+      setMgmtAgreements(mgmtAgreements.map(a => a.id === selectedMgmt.id ? { ...a, status: 'declined' } as ManagementAgreement : a));
+      setSelectedMgmt(null);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-8">
       {/* Create Modal */}
@@ -635,6 +686,17 @@ const Contracts: React.FC = () => {
           >
             Contract Templates
           </button>
+          {(profile?.userType === 'landlord' || profile?.userType === 'manager') && (
+            <button 
+              onClick={() => setActiveTab('management')}
+              className={cn(
+                "px-8 py-4 text-sm font-bold tracking-widest uppercase border-b-2 transition-all",
+                activeTab === 'management' ? "border-blue-900 text-blue-900" : "border-transparent text-slate-400 hover:text-slate-600"
+              )}
+            >
+              Management Agreements
+            </button>
+          )}
         </div>
       )}
 
@@ -687,6 +749,168 @@ const Contracts: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      ) : activeTab === 'management' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           <div className="lg:col-span-1 space-y-4">
+            {mgmtAgreements.length > 0 ? mgmtAgreements.map((agreement) => {
+              const property = myProperties.find(p => p.id === agreement.propertyId);
+              return (
+                <div 
+                  key={agreement.id}
+                  onClick={() => { setSelectedMgmt(agreement); setMgmtSigningStep(0); }}
+                  className={cn(
+                    "p-4 rounded-2xl border-2 cursor-pointer transition-all",
+                    selectedMgmt?.id === agreement.id ? "border-blue-900 bg-blue-50/50" : "border-slate-100 hover:border-slate-200 bg-white"
+                  )}
+                >
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500">
+                      <ShieldCheck className="w-5 h-5" />
+                    </div>
+                    <span className={cn(
+                      "text-[9px] font-bold uppercase px-2 py-0.5 rounded-full",
+                      agreement.status === 'active' ? "bg-green-50 text-green-600" : 
+                      agreement.status === 'pending' ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600"
+                    )}>
+                      {agreement.status}
+                    </span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 truncate">
+                    {property?.address || 'Property Details'}
+                  </h4>
+                  <p className="text-[10px] text-slate-500 mt-1">Management Contract</p>
+                  <div className="flex items-center gap-2 mt-4 text-[10px] text-slate-400">
+                    <Clock className="w-3 h-3" />
+                    Requested {new Date(agreement.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              );
+            }) : (
+              <div className="text-center py-12 bg-white rounded-2xl border border-slate-200">
+                <p className="text-xs text-slate-400 italic">No management agreements found.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-2">
+            <AnimatePresence mode="wait">
+              {selectedMgmt ? (
+                <motion.div 
+                  key={selectedMgmt.id}
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden"
+                >
+                  {mgmtSigningStep === 0 && (
+                    <div className="p-8">
+                      <h3 className="text-xl font-bold text-slate-900 mb-8">Management Agreement</h3>
+                      <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
+                        <div className="space-y-4 text-sm text-slate-600 leading-relaxed">
+                          <p>Agreement between Owner and Property Manager for the property at <span className="font-bold text-slate-900">{myProperties.find(p => p.id === selectedMgmt.propertyId)?.address || 'Selected Property'}</span>.</p>
+                          <div className="grid grid-cols-2 gap-4 py-4 border-y border-slate-200">
+                            <div>
+                              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Commission Rate</p>
+                              <p className="font-bold text-slate-900">{selectedMgmt.commissionRate}% of gross rent</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">Status</p>
+                              <p className="font-bold text-slate-900 capitalize">{selectedMgmt.status}</p>
+                            </div>
+                          </div>
+                          <div className="pt-2">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest mb-1">Contract Terms</p>
+                            <p className="text-xs whitespace-pre-line">{selectedMgmt.terms}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {selectedMgmt.status === 'pending' && profile?.userType === 'manager' && (
+                        <div className="flex gap-4">
+                          <button 
+                            onClick={handleDeclineMgmt}
+                            className="flex-1 py-4 border border-red-200 text-red-600 rounded-xl font-bold hover:bg-red-50 transition-colors"
+                          >
+                            Decline
+                          </button>
+                          <button 
+                            onClick={() => setMgmtSigningStep(1)}
+                            className="flex-1 py-4 bg-blue-900 text-white rounded-xl font-bold hover:bg-black transition-colors flex items-center justify-center gap-2"
+                          >
+                            Proceed to Sign
+                            <Signature className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {mgmtSigningStep === 1 && (
+                    <div className="p-8 text-center max-w-sm mx-auto">
+                      <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Smartphone className="w-8 h-8 text-blue-900" />
+                      </div>
+                      <h3 className="text-xl font-bold text-slate-900 mb-2">Secure Signature</h3>
+                      <p className="text-sm text-slate-500 mb-8">Please enter the 6-digit OTP sent to your registered phone to sign this management agreement.</p>
+                      
+                      <div className="flex gap-2 justify-center mb-8">
+                        {otp.map((digit, idx) => (
+                          <input
+                            key={idx}
+                            id={`otp-${idx}`}
+                            type="text"
+                            maxLength={1}
+                            className="w-10 h-10 border border-slate-200 rounded-lg text-center font-bold text-lg focus:border-blue-900 focus:ring-0 outline-none"
+                            value={digit}
+                            onChange={(e) => {
+                              const newOtp = [...otp];
+                              newOtp[idx] = e.target.value;
+                              setOtp(newOtp);
+                              if (e.target.value && idx < 5) {
+                                document.getElementById(`otp-${idx + 1}`)?.focus();
+                              }
+                            }}
+                          />
+                        ))}
+                      </div>
+
+                      <button 
+                        onClick={handleAcceptMgmt}
+                        className="w-full py-4 bg-blue-900 text-white rounded-xl font-bold hover:bg-black transition-colors mb-4"
+                      >
+                        Sign Agreement
+                      </button>
+                      <button onClick={handleResendOtp} className="text-xs text-slate-400 font-bold hover:text-blue-900">Resend Code</button>
+                    </div>
+                  )}
+
+                  {mgmtSigningStep === 2 && (
+                    <div className="p-12 text-center">
+                      <div className="w-20 h-20 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <Check className="w-10 h-10 text-green-600" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900 mb-2">Contract Signed!</h3>
+                      <p className="text-sm text-slate-500 mb-8">The management agreement is now active. You have been assigned as the manager for this property.</p>
+                      <button 
+                        onClick={() => navigate('/properties')}
+                        className="px-8 py-3 bg-blue-900 text-white rounded-xl font-bold hover:bg-black transition-colors"
+                      >
+                        Go to Properties
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12 bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-200 mb-4 shadow-sm">
+                    <ShieldCheck className="w-8 h-8" />
+                  </div>
+                  <h4 className="font-bold text-slate-400 tracking-wide">Select an agreement to view details</h4>
+                </div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

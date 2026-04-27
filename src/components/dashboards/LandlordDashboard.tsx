@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, or } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../../firebase';
 import { useAuth } from '../../AuthContext';
 import { Property, MaintenanceRequest, Payment, Lease } from '../../types';
@@ -44,7 +44,13 @@ const LandlordDashboard: React.FC = () => {
       if (!profile) return;
       try {
         // Fetch Properties
-        const propQ = query(collection(db, 'properties'), where('landlordOrManager', '==', profile.uid));
+        const propQ = query(
+          collection(db, 'properties'), 
+          or(
+            where('landlordOrManager', '==', profile.uid),
+            where('ownerId', '==', profile.uid)
+          )
+        );
         const propSnap = await getDocs(propQ).catch(err => handleFirestoreError(err, OperationType.GET, 'properties'));
         let fetchedProps: Property[] = [];
         if (propSnap) {

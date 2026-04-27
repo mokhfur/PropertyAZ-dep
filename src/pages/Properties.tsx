@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, query, where, getDocs, addDoc, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc, orderBy, or } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../firebase';
 import { useAuth } from '../AuthContext';
 import { Property, User } from '../types';
@@ -128,7 +128,14 @@ const Properties: React.FC = () => {
       if (!profile) return;
       try {
         // Fetch Properties
-        const propQ = query(collection(db, 'properties'), where('landlordOrManager', '==', profile.uid), orderBy('createdAt', 'desc'));
+        const propQ = query(
+          collection(db, 'properties'), 
+          or(
+            where('landlordOrManager', '==', profile.uid),
+            where('ownerId', '==', profile.uid)
+          ),
+          orderBy('createdAt', 'desc')
+        );
         const propSnap = await getDocs(propQ).catch(err => handleFirestoreError(err, OperationType.GET, 'properties'));
         
         if (propSnap) {
